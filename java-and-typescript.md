@@ -52,16 +52,21 @@ Java is `io.github.intisy.ai.api` in bayonet's `contract` module. TypeScript is
 | deferred value | `CompletionStage<T>` | `Promise<T>` | 8 |
 | disposer | `Runnable` | `() => void` | 10 |
 | timeout | `WantOptions` | `WantOptions { timeoutMs?: number }` | 8 |
-| refusal | `PluginException`, RETURNED, with `null` meaning acceptable | `PluginErrorShape { name: "PluginError"; pluginId; detail; fix; message }`, recognised by the `name` marker rather than by type identity | 1 |
+| refusal | `PluginException`, RETURNED, with `null` meaning acceptable | `PluginError { name: "PluginError"; pluginId; detail; fix; message }`, recognised by the `name` marker rather than by type identity | 1 |
 | host identity | `HostDescriptor`: `api`, `app`, `surfaces` | same three fields | 2 |
 | api floor | `Api.API_VERSION = 2`, and `int api` per manifest | `API_VERSION: number`, the package's only runtime export | 2 |
-| **scheduling** | `Scheduler` plus its `Cancellable`, **engine-internal today, moving onto the contract** | **nothing today**, and the driver's own `setTimeout` deadlines instead | 8 |
+| **scheduling** | `Scheduler.schedule(Runnable task, long delayMillis)` returning `Cancellable`, with `Scheduler.NEVER`; **engine-internal today, moving onto the contract** | `Scheduler { schedule(task: () => void, delayMillis: number): () => void }` on the contract, with a `NEVER` scheduler; cancelling is the returned disposer, by naming rule 2 below | 8 |
 
 **The scheduler row is the one line of this table that prescribes rather than describes**, ruled
 2026-10-18 (section 8, question 1). Every deadline in the system comes from the host-supplied
 scheduler: activation, deactivation, `want` timeouts and watch delivery. Java moves `Scheduler` out
-of the engine and onto the contract; TypeScript gains it. Until that lands, the two existing
-bindings disagree here and section 6 records why that is a defect rather than a gap.
+of the engine and onto the contract; TypeScript gains it, in the shape above, fixed 2026-10-20 for
+the native implementation. Until both land, the two existing bindings disagree here and section 6
+records why that is a defect rather than a gap.
+
+**The refusal type is `PluginError`, corrected 2026-10-20.** This row used to name
+`PluginErrorShape`, which exists only in the TeaVM bundle's `engine.d.ts` and which section 5
+excludes as bridge vocabulary; the fields and the `name` marker are unchanged.
 
 **Four further concepts entered the model on 2026-10-20** and are spelled in section 9 rather than
 in this table, because each needs its rules beside its names: a requirement's policy, the edge
@@ -245,7 +250,7 @@ reported with its members and never thrown**, and the units in it are left out o
 | an offer | `ActivationUnit.Offer(DeclarationKind, String id)` | `{ kind: DeclarationKind; id: string }` |
 | a need | `ActivationUnit.Need(DeclarationKind, String id, boolean optional, boolean degradable)` | `{ kind: DeclarationKind; id: string; optional: boolean; degradable: boolean }` |
 | the call | `Activation.order(List<ActivationUnit>, DeclarationKind)` | `order(units, edgeSource)` |
-| the answer | `ActivationPlan`: `getOrder()`, `getCycles()`, `getRefusals()` | `{ order: string[]; cycles: string[][]; refusals: PluginErrorShape[] }` |
+| the answer | `ActivationPlan`: `getOrder()`, `getCycles()`, `getRefusals()` | `{ order: string[]; cycles: string[][]; refusals: PluginError[] }` |
 
 A refusal is a refusal VALUE, by invariant 1, so Java returns `PluginException` instances rather
 than throwing the first one: a host quarantines the units it cannot start and starts the rest.
@@ -299,7 +304,7 @@ way rather than quietly handed over.
 | a handle | `Handles.Handle { Object get(); void revoke(); }` | `{ get(): unknown; revoke(): void }` |
 | the default | `Handles.UNWRAPPED` | the same, reporting on revocation |
 | the platform backing | `io.github.intisy.ai.seam.jvm.ReflectiveHandles`, a dynamic proxy over the interfaces the service implements | a backing over the language's own `Proxy`, which needs no reflection |
-| the failure | `ServiceRevoked(String serviceId)`, a `RuntimeException` | a thrown error carrying `serviceId`, recognised by a `name` marker as `PluginErrorShape` is |
+| the failure | `ServiceRevoked(String serviceId)`, a `RuntimeException` | a thrown error carrying `serviceId`, recognised by a `name` marker as `PluginError` is |
 
 **`toString` answers on a revoked handle rather than failing.** A logger stringifying a dead handle
 inside a catch block would otherwise throw from within error handling and replace the real failure.
