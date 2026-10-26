@@ -25,3 +25,14 @@ the readable companion of.
 
 A binding specification is normative. Change it first, then make the implementation match it; an
 implementation that disagrees with its binding is the defect, not the document.
+
+## The echo fixture
+
+`fixtures/echo` is a neutral C library that exists only so an implementation can prove its native
+loading end to end: it downloads the release, verifies it by SHA-256 and calls four functions that
+succeed, fail on purpose, take an argument and return bytes that are not UTF-8. It declares itself
+in `fixtures/echo/library.json`, which is a copy of the model's `echo.library.json` fixture.
+
+Pushing a `v*` tag builds it for `linux-x64` and `win32-x64` through the shared library workflow and
+publishes a release holding the declaration, the two binaries and a `SHA256SUMS` to pin. `v0.1.0` is
+the first.
