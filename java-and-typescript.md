@@ -325,7 +325,8 @@ S-29. The library tier of `ECOSYSTEM.md` rev 113 rests on one capability: an imp
 and calls a C library, so every library ever written works on it and the binding matrix is N rather
 than N times M. This section makes that a requirement of every implementation and pins how the two
 existing languages render it. Both renderings below were run on 2026-10-20, calling the C runtime's
-`strlen` on Windows x64, not read from documentation.
+`strlen` on Windows x64, not read from documentation. The TypeScript rendering was changed from
+`node:ffi` to koffi on 2026-10-26 after the measurements in the second table.
 
 ### 10.1 What every implementation provides
 
@@ -356,11 +357,23 @@ for the platform it runs on. An operator installs nothing.
 
 | | Java | TypeScript |
 | --- | --- | --- |
-| mechanism | **JNA**, `net.java.dev.jna:jna:5.19.1` | **`node:ffi`**, built into Node |
-| proven | `Native.load("msvcrt", Crt.class).strlen("weivel")` returned `6`, compiled `--release 8` | `dlopen("msvcrt.dll", { strlen: { arguments: [types.STRING], return: types.UINT_64 } })` returned `6n`, Node 26.3.1 |
-| footprint | 1.95 MB jar, class version 52, dispatch libraries for 27 platforms inside it | none, it is the runtime |
+| mechanism | **JNA**, `net.java.dev.jna:jna:5.19.1` | **koffi 2.16.3**, an npm package that ships prebuilt binaries |
+| proven | `Native.load("msvcrt", Crt.class).strlen("weivel")` returned `6`, compiled `--release 8` | `koffi.load("msvcrt.dll").func("size_t strlen(const char *)")("weivel")` returned `6`, unflagged, on Node 26.3.1, on Electron 32.3.3's Node 20.18.1, and on Bun 1.4.3 |
+| footprint | 1.95 MB jar, class version 52, dispatch libraries for 27 platforms inside it | one npm dependency carrying its own per-platform binaries |
 | where | the seam backing, supplied once per host, never by a plugin (the plugin weight rule) | the native TypeScript implementation of S-16 step 3 |
-| its condition | none beyond the dependency | `--experimental-ffi` on 26.3.1; reported on by default from 26.9.0, **not yet confirmed against the release notes**. Re-measure before pinning a minimum Node version |
+| its condition | none beyond the dependency | none beyond the dependency, on every runtime measured |
+
+**Why koffi and not `node:ffi`**, measured 2026-10-26 on Windows x64, calling `strlen` with `"weivel"`:
+
+| runtime | `node:ffi` | koffi 2.16.3 |
+| --- | --- | --- |
+| Node 26.3.1 | `ERR_UNKNOWN_BUILTIN_MODULE` unflagged; works only with `--experimental-ffi` | `6`, unflagged |
+| Electron 32.3.3 (Node 20.18.1) | absent | `6`, unflagged |
+| Bun 1.4.3 (released 2026-10-10) | does not exist | `6`, unflagged, against `msvcrt.dll`, koffi installed with npm into a scratch directory |
+
+The hosts this tier must serve include Electron and OpenCode, which runs on Bun, and `node:ffi` is
+absent on both, so it cannot be the rendering. koffi runs on all three, so one TypeScript backend
+serves every host measured and no second backend is needed for Bun.
 
 **Why not the alternatives, each ruled out on a measured or stated rule rather than on taste:**
 
@@ -368,8 +381,8 @@ for the platform it runs on. An operator installs nothing.
   exists to keep a TeaVM 1.8 route open (`docs/apps/CLAUDE.md`, Java source level).
 - **JNI** needs C glue per library, compiled per platform, which doubles the per-platform binaries
   that condition two exists to keep to one per library.
-- **koffi** in TypeScript ships its own per-platform binary, a second thing to acquire per platform
-  when the runtime already provides the mechanism.
+- **`node:ffi`** in TypeScript, the first choice here, is absent on Electron and Bun and unflagged
+  only from a Node release newer than the one measured (see the table above).
 - **The TeaVM bundle cannot load C at all.** It runs in a JavaScript engine with no FFI. That is
   no requirement on it, because it is the bridge S-16 retires; a host with no FFI (a browser)
   reaches a library only through rev 113 (e)'s WASM trigger.
@@ -394,5 +407,5 @@ and is S-32.
 - **A conformance vector family.** S-29 defers it until a second implementation exists to measure,
   since one implementation passing its own vectors proves nothing about the requirement.
 - **Callbacks from C into the host.** basekit's event bus and streams may need them; nothing measured
-  here does, and both mechanisms have one (`Callback` in JNA, `types.FUNCTION` in `node:ffi`), so
+  here does, and both mechanisms have one (`Callback` in JNA, `koffi.register` in koffi), so
   the question is the ownership of a callback's lifetime, not whether it is possible.
