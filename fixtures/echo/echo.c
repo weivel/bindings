@@ -1,3 +1,5 @@
+#include <errno.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +10,8 @@
 #else
 #define ECHO_EXPORT __attribute__((visibility("default")))
 #endif
+
+#define MAX_REPEAT_COUNT (1L << 24)
 
 static int32_t fail_with(const char *message, const char *fix, uint8_t **out, size_t *out_len) {
     static const char template[] = "{\"message\":\"%s\",\"fix\":\"%s\"}";
@@ -56,7 +60,9 @@ ECHO_EXPORT int32_t echo_repeat(const uint8_t *in, size_t in_len, uint8_t **out,
         *out_len = 0;
         return 2;
     }
-    memcpy(text, in, in_len);
+    if (in_len > 0) {
+        memcpy(text, in, in_len);
+    }
     text[in_len] = '\0';
 
     const char *key = strstr(text, "\"count\"");
@@ -64,12 +70,17 @@ ECHO_EXPORT int32_t echo_repeat(const uint8_t *in, size_t in_len, uint8_t **out,
     long count = -1;
     if (colon != NULL) {
         char *end = NULL;
+        errno = 0;
         count = strtol(colon + 1, &end, 10);
-        if (end == colon + 1) {
+        if (end == colon + 1 || (errno == ERANGE && count == LONG_MIN)) {
             count = -1;
         }
     }
     free(text);
+
+    if (count > MAX_REPEAT_COUNT) {
+        return fail_with("repeat count is too large", "use a count of at most 16777216", out, out_len);
+    }
 
     if (count < 0) {
         return fail_with("repeat needs a non-negative count", "pass {\\\"count\\\": 3}", out, out_len);
