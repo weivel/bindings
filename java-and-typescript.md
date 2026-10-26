@@ -381,8 +381,9 @@ serves every host measured and no second backend is needed for Bun.
   exists to keep a TeaVM 1.8 route open (`docs/apps/CLAUDE.md`, Java source level).
 - **JNI** needs C glue per library, compiled per platform, which doubles the per-platform binaries
   that condition two exists to keep to one per library.
-- **`node:ffi`** in TypeScript, the first choice here, is absent on Electron and Bun and unflagged
-  only from a Node release newer than the one measured (see the table above).
+- **`node:ffi`** in TypeScript, the first choice here, is absent on Electron and Bun, and unflagged it fails
+  with `ERR_UNKNOWN_BUILTIN_MODULE` on Node 26.3.1 (see the table above); whether a later Node release
+  unflags it was not checked.
 - **The TeaVM bundle cannot load C at all.** It runs in a JavaScript engine with no FFI. That is
   no requirement on it, because it is the bridge S-16 retires; a host with no FFI (a browser)
   reaches a library only through rev 113 (e)'s WASM trigger.
@@ -407,5 +408,5 @@ and is S-32.
 - **A conformance vector family.** S-29 defers it until a second implementation exists to measure,
   since one implementation passing its own vectors proves nothing about the requirement.
 - **Callbacks from C into the host.** basekit's event bus and streams may need them; nothing measured
-  here does, and both mechanisms have one (`Callback` in JNA, `koffi.register` in koffi), so
+  here does, and both mechanisms have one (`Callback` in JNA, and `koffi.register` in koffi, named from knowledge and not measured here), so
   the question is the ownership of a callback's lifetime, not whether it is possible.
